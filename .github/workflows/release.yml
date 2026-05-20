@@ -1,0 +1,33 @@
+name: Release
+
+# Publish a prebuilt Hertz.app whenever a version tag is pushed.
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    # macOS 26 image ships Xcode 26 / Swift 6.2 (the package needs 6.2).
+    runs-on: macos-26
+    permissions:
+      contents: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need tags for the version stamp
+
+      - name: Build app bundle
+        run: bash scripts/bundle.sh
+        env:
+          HERTZ_VERSION: ${{ github.ref_name }}
+
+      - name: Zip the bundle
+        run: ditto -c -k --keepParent Hertz.app Hertz.app.zip
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Hertz.app.zip
+          generate_release_notes: true
