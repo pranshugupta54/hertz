@@ -13,11 +13,13 @@ public struct BatterySnapshot {
     public var cycleCount: Int
     public var temperature: Double   // °C
     public var adapterWatts: Int     // 0 when not on AC
+    public var acMinutes: Int        // minutes on AC, -1 if not on AC / unknown
 
     public init(present: Bool = false, percent: Double = 0, charging: Bool = false,
                 onAC: Bool = false, minutesRemaining: Int = -1,
                 healthPercent: Double = 0, cycleCount: Int = 0,
-                temperature: Double = 0, adapterWatts: Int = 0) {
+                temperature: Double = 0, adapterWatts: Int = 0,
+                acMinutes: Int = -1) {
         self.present = present
         self.percent = percent
         self.charging = charging
@@ -27,6 +29,7 @@ public struct BatterySnapshot {
         self.cycleCount = cycleCount
         self.temperature = temperature
         self.adapterWatts = adapterWatts
+        self.acMinutes = acMinutes
     }
 }
 
@@ -45,6 +48,12 @@ public struct DeviceBattery: Identifiable {
 /// Reads the battery: charge state from the power-sources API, and
 /// health/cycles/temperature/adapter from the AppleSmartBattery registry.
 public final class BatteryMetrics {
+    // "Time on AC" — counted from a not-AC → AC transition this process saw.
+    // If Hertz launched while already on AC, the transition was missed and
+    // no time is shown until the next real plug-in.
+    private var acSince: Date?
+    private var previousOnAC: Bool?
+
     public init() {}
 
     public func read() -> BatterySnapshot {
@@ -72,6 +81,18 @@ public final class BatteryMetrics {
                 break
             }
         }
+        // --- time on AC ---
+        if let prev = previousOnAC, snap.onAC, !prev {
+            acSince = Date() // just plugged in
+        }
+        if !snap.onAC {
+            acSince = nil
+        }
+        previousOnAC = snap.onAC
+        if let since = acSince {
+            snap.acMinutes = max(0, Int(Date().timeIntervalSince(since) / 60))
+        }
+
         guard snap.present else { return snap }
 
         // --- health, cycle count, temperature, adapter wattage ---

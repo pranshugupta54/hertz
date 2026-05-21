@@ -273,15 +273,20 @@ private struct BatterySection: View {
     let devices: [DeviceBattery]
 
     private var status: String {
+        var base: String
         if battery.charging {
-            return battery.minutesRemaining >= 0
+            base = battery.minutesRemaining >= 0
                 ? "\(fmtMinutes(battery.minutesRemaining)) to full" : "charging"
+        } else if battery.onAC {
+            base = battery.percent >= 99 ? "charged" : "plugged in"
+        } else {
+            return battery.minutesRemaining >= 0
+                ? "\(fmtMinutes(battery.minutesRemaining)) remaining" : "on battery"
         }
-        if battery.onAC {
-            return battery.percent >= 99 ? "charged" : "plugged in"
+        if battery.acMinutes >= 0 {
+            base += " · \(fmtMinutes(battery.acMinutes)) on AC"
         }
-        return battery.minutesRemaining >= 0
-            ? "\(fmtMinutes(battery.minutesRemaining)) remaining" : "on battery"
+        return base
     }
 
     private var detail: String {
