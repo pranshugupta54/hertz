@@ -16,6 +16,15 @@ Sources/Hertz/         executable — the SwiftUI menu-bar app
 Sources/HertzVerify/   executable — dev-only metric verifier
 ```
 
+```mermaid
+flowchart LR
+    core["HertzCore<br/>(library)"]
+    app["Hertz<br/>(the app)"]
+    verify["HertzVerify<br/>(dev verifier)"]
+    core --> app
+    core --> verify
+```
+
 - **HertzCore is a library** so the app *and* the verifier exercise the exact
   same collector code — what you verify is what ships.
 - **HertzVerify is an executable, not a test target**, because the Command
@@ -25,15 +34,46 @@ Sources/HertzVerify/   executable — dev-only metric verifier
 
 ## Data flow
 
-```
-HertzCore collectors  →  MetricsModel  →  SwiftUI views
-   (read the OS)         (@Observable,      (DashboardView)
-                          2s timer)
+```mermaid
+flowchart TB
+    kernel["macOS kernel — Mach · libproc · IOKit · SMC · CoreWLAN"]
+
+    subgraph core["HertzCore (library)"]
+        sys["SystemMetrics"]
+        proc["ProcessCollector → ProcessTree"]
+        bat["BatteryMetrics"]
+        smc["SMC"]
+        health["HealthScore"]
+    end
+
+    model["MetricsModel<br/>@Observable · 2s timer"]
+    view["DashboardView<br/>MenuBarExtra dropdown"]
+    upd["UpdateChecker"]
+
+    kernel --> core
+    core --> model
+    model --> view
+    upd -.->|GitHub Releases| view
 ```
 
 `MetricsModel` runs a 2-second timer on the main actor, calls every collector,
 and stores the snapshots. The SwiftUI views observe the model and re-render.
 `UpdateChecker` runs independently on its own schedule.
+
+### The refresh cycle
+
+```mermaid
+sequenceDiagram
+    autonumber
+    loop every 2 seconds
+        MetricsModel->>HertzCore: cpu() · memory() · disk() · processes()...
+        HertzCore->>Kernel: syscalls
+        Kernel-->>HertzCore: raw cumulative counters
+        HertzCore-->>MetricsModel: typed snapshots
+        MetricsModel-->>DashboardView: @Observable change
+        DashboardView->>DashboardView: re-render
+    end
+```
 
 ## The collectors (`HertzCore`)
 
@@ -75,27 +115,63 @@ command and must report `ALL CHECKS PASSED`.
 | `DashboardView.swift` | the whole dropdown UI — sectioned vertical panel |
 | `UpdateChecker.swift` | auto-update from GitHub Releases |
 
-The dropdown is one vertical instrument panel divided by hairlines: a hardware
-header, then CPU / Memory / Disk / Network / Battery sections, the process
-tree, and a footer. UI stays flat and native — no gradients.
+### Dropdown layout
+
+```
+┌──────────────────────────────────────────────┐
+│  ● 100 Excellent · Apple M4 · 16 GB   up 1d   │  hardware header
+├──────────────────────────────────────────────┤
+│  ▣ CPU                                 14.9%  │
+│     ∿∿∿ sparkline ∿∿∿                          │
+│     ▁▃▅▂ per-core bars        load · temp      │
+├──────────────────────────────────────────────┤
+│  ▤ MEMORY                                66%  │
+│     ∿∿∿ sparkline ∿∿∿     Used·Free·Swap        │
+├──────────────────────────────────────────────┤
+│  ▥ DISK     ◐      ▥ NETWORK    ↓ / ↑          │
+├──────────────────────────────────────────────┤
+│  ▸ BATTERY                          100%  ⚡︎  │
+├──────────────────────────────────────────────┤
+│  ∿ TOP PROCESSES               CPU      MEM    │
+│     ▸ App (9)                  12.4   1.2 GB   │  process tree,
+│        helper                   0.4   350 MB  │  expandable
+├──────────────────────────────────────────────┤
+│  ∿ Hertz 0.1.0  ⟳            ☑ Login    Quit ⏻ │  footer
+└──────────────────────────────────────────────┘
+```
+
+One vertical instrument panel divided by hairlines. UI stays flat and native —
+no gradients, no faux-glass.
 
 ## Auto-update
 
-`UpdateChecker` checks `releases/latest` on the GitHub API at launch and every
-24 hours (and on the footer button).
+`UpdateChecker` checks `releases/latest` on the GitHub API at launch, every
+24 hours, and on the footer ⟳ button.
 
-A running app can't overwrite its own bundle, so when a newer release exists
-it: downloads the zip → unzips to a temp dir → writes a small detached shell
-script → quits. The script waits for the process to exit, swaps
-`Hertz.app` in place, and relaunches.
+```mermaid
+flowchart TD
+    start(["launch · every 24h · ⟳ button"]) --> check{"newer release<br/>on GitHub?"}
+    check -->|no| done(["done — try again later"])
+    check -->|yes| dl["download Hertz.app.zip"]
+    dl --> unzip["unzip to temp · strip quarantine"]
+    unzip --> spawn["write + spawn detached swap script"]
+    spawn --> quit["app quits"]
+    quit --> swap["script: replace the .app bundle in place"]
+    swap --> relaunch(["relaunch — updated"])
+```
+
+A running app can't overwrite its own bundle, so the swap is handed to a
+detached shell script that waits for the process to exit first.
 
 ## Build & release pipeline
 
-```
-git tag v0.x.y  →  .github/workflows/release.yml (macos-26 runner)
-                →  scripts/bundle.sh builds + version-stamps Hertz.app
-                →  zipped, attached to a GitHub Release
-                →  installed copies auto-update within 24h
+```mermaid
+flowchart LR
+    tag["git tag v0.x.y"] --> action["GitHub Action<br/>macos-26 runner"]
+    action --> build["bundle.sh<br/>build + version-stamp"]
+    build --> rel["GitHub Release<br/>Hertz.app.zip"]
+    rel --> auto["installed apps<br/>auto-update ≤24h"]
+    rel --> fresh["install.sh / brew cask<br/>new installs"]
 ```
 
 - `scripts/bundle.sh` — compiles release, assembles `Hertz.app`, stamps the
