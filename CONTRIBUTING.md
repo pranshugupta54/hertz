@@ -19,14 +19,13 @@ cd hertz
 Sources/HertzCore/    Metric collectors — Mach, libproc, IOKit, SMC, CoreWLAN
 Sources/Hertz/        The SwiftUI menu-bar app (MenuBarExtra)
 Sources/HertzVerify/  Dev-only tool that cross-checks every metric
-scripts/               bundle.sh (build the .app), makeicon.sh, Info.plist
-.github/workflows/     release.yml — builds + publishes on a version tag
+scripts/              bundle.sh (build the .app), makeicon.sh, Info.plist
+.github/workflows/    release.yml — builds + publishes on a version tag
 ```
 
-- `HertzCore` is a library so both the app and the verifier exercise the
-  exact same collector code.
-- `HertzVerify` is a separate executable, not a test target — the Command
-  Line Tools toolchain ships no XCTest. It never ends up in the shipped app.
+**Read [ARCHITECTURE.md](ARCHITECTURE.md)** for the full picture — targets,
+data flow, every collector, the metric-accuracy gotchas, the auto-update
+mechanism, and the release pipeline. Skim it before a non-trivial change.
 
 ## Build and run
 
