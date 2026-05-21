@@ -48,9 +48,11 @@ public struct DeviceBattery: Identifiable {
 /// Reads the battery: charge state from the power-sources API, and
 /// health/cycles/temperature/adapter from the AppleSmartBattery registry.
 public final class BatteryMetrics {
-    // "Time on AC" — counted from when this process first saw the Mac on AC
-    // (or from the moment it was plugged in, if Hertz was already running).
+    // "Time on AC" — seeded once per AC session with the real plug-in time
+    // from the power log. If that can't be read, it stays unknown (no value
+    // is invented).
     private var acSince: Date?
+    private var acLookupTried = false
 
     public init() {}
 
@@ -81,9 +83,15 @@ public final class BatteryMetrics {
         }
         // --- time on AC ---
         if snap.onAC {
-            if acSince == nil { acSince = Date() } // start counting
+            // Look up the real plug-in time once per AC session. If the log
+            // can't be read, leave it unknown — never invent a value.
+            if !acLookupTried {
+                acSince = acConnectedSince()
+                acLookupTried = true
+            }
         } else {
             acSince = nil
+            acLookupTried = false
         }
         if let since = acSince {
             snap.acMinutes = max(0, Int(Date().timeIntervalSince(since) / 60))
@@ -149,6 +157,48 @@ public final class BatteryMetrics {
             service = IOIteratorNext(iterator)
         }
         return devices
+    }
+}
+
+extension BatteryMetrics {
+    /// The timestamp the Mac was last switched onto AC, parsed from the
+    /// `pmset` power-management log. nil if it can't be determined.
+    fileprivate func acConnectedSince() -> Date? {
+        guard let log = runPmsetLog() else { return nil }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss Z"
+
+        var onAC = false
+        var sinceAC: Date?
+        for line in log.split(separator: "\n") {
+            let lower = line.lowercased()
+            let isAC = lower.contains("using ac")
+            let isBatt = lower.contains("using batt")
+            guard isAC || isBatt,
+                  let date = formatter.date(from: String(line.prefix(25)))
+            else { continue }
+            if isAC, !onAC {
+                sinceAC = date // transitioned battery -> AC here
+                onAC = true
+            } else if isBatt {
+                onAC = false
+            }
+        }
+        return onAC ? sinceAC : nil
+    }
+
+    private func runPmsetLog() -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
+        process.arguments = ["-g", "log"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        guard (try? process.run()) != nil else { return nil }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return String(data: data, encoding: .utf8)
     }
 }
 
