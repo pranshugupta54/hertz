@@ -3,20 +3,85 @@ import Foundation
 import IOKit
 import CoreWLAN
 
+@_silgen_name("notify_register_check")
+private func notifyRegisterCheck(_ name: UnsafePointer<CChar>,
+                                 _ token: UnsafeMutablePointer<Int32>) -> UInt32
+
+@_silgen_name("notify_get_state")
+private func notifyGetState(_ token: Int32,
+                            _ state: UnsafeMutablePointer<UInt64>) -> UInt32
+
+@_silgen_name("notify_cancel")
+private func notifyCancel(_ token: Int32) -> UInt32
+
 /// System-wide CPU, sampled per core.
+public enum ThermalPressure: Int {
+    case unknown = -1
+    case nominal = 0
+    case moderate = 1
+    case heavy = 2
+    case critical = 3
+
+    public var label: String {
+        switch self {
+        case .unknown: return "unknown"
+        case .nominal: return "nominal"
+        case .moderate: return "moderate"
+        case .heavy: return "heavy"
+        case .critical: return "critical"
+        }
+    }
+
+    public var isElevated: Bool {
+        self == .moderate || self == .heavy || self == .critical
+    }
+
+    var healthPenalty: Double {
+        switch self {
+        case .unknown, .nominal: return 0
+        case .moderate: return 6
+        case .heavy: return 18
+        case .critical: return 34
+        }
+    }
+
+    static func fromDarwinLevel(_ level: UInt64) -> ThermalPressure {
+        switch level {
+        case 0: return .nominal
+        case 1: return .moderate
+        case 2: return .heavy
+        case 3...: return .critical
+        default: return .unknown
+        }
+    }
+
+    static func fromProcessInfo(_ state: ProcessInfo.ThermalState) -> ThermalPressure {
+        switch state {
+        case .nominal: return .nominal
+        case .fair: return .moderate
+        case .serious: return .heavy
+        case .critical: return .critical
+        @unknown default: return .unknown
+        }
+    }
+}
+
 public struct CPUSnapshot {
     public var total: Double      // 0-100 overall busy
     public var perCore: [Double]  // 0-100 per core
     public var load1: Double
     public var load5: Double
     public var load15: Double
+    public var thermalPressure: ThermalPressure
     public init(total: Double = 0, perCore: [Double] = [],
-                load1: Double = 0, load5: Double = 0, load15: Double = 0) {
+                load1: Double = 0, load5: Double = 0, load15: Double = 0,
+                thermalPressure: ThermalPressure = .unknown) {
         self.total = total
         self.perCore = perCore
         self.load1 = load1
         self.load5 = load5
         self.load15 = load15
+        self.thermalPressure = thermalPressure
     }
 }
 
@@ -134,8 +199,16 @@ public final class SystemMetrics {
     private var prevDiskRead: UInt64 = 0
     private var prevDiskWrite: UInt64 = 0
     private var prevDiskWall: UInt64 = 0
+    private var thermalPressureToken: Int32 = 0
+    private var hasThermalPressureToken = false
 
     public init() {}
+
+    deinit {
+        if hasThermalPressureToken {
+            _ = notifyCancel(thermalPressureToken)
+        }
+    }
 
     /// host_processor_info(PROCESSOR_CPU_LOAD_INFO) — per-core tick counters
     /// [user, system, idle, nice]. Load averages come from getloadavg.
@@ -149,9 +222,11 @@ public final class SystemMetrics {
 
         var loads = [Double](repeating: 0, count: 3)
         getloadavg(&loads, 3)
+        let thermalPressure = thermalPressure()
 
         guard kr == KERN_SUCCESS, let info else {
-            return CPUSnapshot(load1: loads[0], load5: loads[1], load15: loads[2])
+            return CPUSnapshot(load1: loads[0], load5: loads[1], load15: loads[2],
+                               thermalPressure: thermalPressure)
         }
         defer {
             vm_deallocate(mach_task_self_,
@@ -189,7 +264,28 @@ public final class SystemMetrics {
         // Apple silicon because parked cores accumulate ticks unevenly.
         let total = perCore.isEmpty ? 0 : perCore.reduce(0, +) / Double(perCore.count)
         return CPUSnapshot(total: total, perCore: perCore,
-                           load1: loads[0], load5: loads[1], load15: loads[2])
+                           load1: loads[0], load5: loads[1], load15: loads[2],
+                           thermalPressure: thermalPressure)
+    }
+
+    /// OS thermal pressure. The Darwin notification exposes the more useful
+    /// moderate-vs-heavy split; ProcessInfo is the public fallback.
+    public func thermalPressure() -> ThermalPressure {
+        if !hasThermalPressureToken {
+            let status = "com.apple.system.thermalpressurelevel".withCString {
+                notifyRegisterCheck($0, &thermalPressureToken)
+            }
+            hasThermalPressureToken = status == 0
+        }
+
+        if hasThermalPressureToken {
+            var state: UInt64 = 0
+            if notifyGetState(thermalPressureToken, &state) == 0 {
+                return ThermalPressure.fromDarwinLevel(state)
+            }
+        }
+
+        return ThermalPressure.fromProcessInfo(ProcessInfo.processInfo.thermalState)
     }
 
     /// hw.memsize for the total, host_statistics64(HOST_VM_INFO64) for the
