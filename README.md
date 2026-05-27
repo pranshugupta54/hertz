@@ -45,7 +45,8 @@ manual check in the footer. Nothing to do.
 
 ## What it shows
 
-- **CPU** — overall %, a live sparkline, per-core bars, load average, temperature
+- **CPU** — overall %, a live sparkline, per-core bars, load average, temperature,
+  and thermal pressure when macOS reports throttling risk
 - **Memory** — pressure, used / free / swap, with a trend graph
 - **Disk** — usage donut, free space, live read/write throughput, filesystem
 - **Network** — up / down throughput with a trend graph, local IP, Wi-Fi SSID, VPN state
@@ -63,6 +64,7 @@ Everything is read directly from the OS — no shelling out, no polling `top`:
 | Metric | Source |
 | --- | --- |
 | CPU / memory | Mach — `host_processor_info`, `host_statistics64` |
+| Thermal pressure | Darwin notify — `com.apple.system.thermalpressurelevel` with `ProcessInfo` fallback |
 | Processes | `libproc` — `proc_listallpids`, `proc_pidinfo`, `proc_pid_rusage` |
 | Disk | `statfs` + IOKit `IOBlockStorageDriver` |
 | Battery | IOKit power sources + the `AppleSmartBattery` registry |

@@ -108,6 +108,9 @@ private struct CPUSection: View {
         if sensors.cpuTemperature > 0 {
             parts.append(String(format: "%.0f°C", sensors.cpuTemperature))
         }
+        if cpu.thermalPressure != .unknown {
+            parts.append("thermal \(cpu.thermalPressure.label)")
+        }
         if let fan = sensors.fanRPM.first, fan > 0 {
             parts.append("\(fan) rpm")
         }
@@ -117,7 +120,10 @@ private struct CPUSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(icon: "cpu", title: "CPU") {
-                Headline(value: cpu.total, fractionDigits: 1, color: loadColor(cpu.total))
+                HStack(spacing: 8) {
+                    ThermalBadge(pressure: cpu.thermalPressure)
+                    Headline(value: cpu.total, fractionDigits: 1, color: loadColor(cpu.total))
+                }
             }
             Sparkline(values: history).frame(height: 30)
             CoreBars(perCore: cpu.perCore)
@@ -300,6 +306,35 @@ private struct NetworkSection: View {
                     Text(label).font(.caption2).foregroundStyle(.secondary)
                 }
             }
+        }
+    }
+}
+
+private struct ThermalBadge: View {
+    let pressure: ThermalPressure
+
+    private var color: Color {
+        switch pressure {
+        case .unknown, .nominal: return .secondary
+        case .moderate: return .yellow
+        case .heavy, .critical: return .red
+        }
+    }
+
+    private var icon: String {
+        switch pressure {
+        case .unknown, .nominal: return "thermometer.low"
+        case .moderate: return "thermometer.medium"
+        case .heavy, .critical: return "thermometer.high"
+        }
+    }
+
+    var body: some View {
+        if pressure.isElevated {
+            Label(pressure.label, systemImage: icon)
+                .font(.caption2)
+                .foregroundStyle(color)
+                .fixedSize()
         }
     }
 }

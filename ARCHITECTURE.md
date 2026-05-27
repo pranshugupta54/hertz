@@ -79,7 +79,7 @@ sequenceDiagram
 
 | File | Provides | OS interface |
 | --- | --- | --- |
-| `SystemMetrics.swift` | CPU, memory pressure, disk, network, hardware info | Mach `host_*`, `sysctl`, `statfs`, IOKit, `getifaddrs`, CoreWLAN |
+| `SystemMetrics.swift` | CPU, thermal pressure, memory pressure, disk, network, hardware info | Mach `host_*`, Darwin notify, `sysctl`, `statfs`, IOKit, `getifaddrs`, CoreWLAN |
 | `ProcessCollector.swift` | process list — pid, name, CPU, memory, path | `libproc` |
 | `ProcessTree.swift` | parent/child forest + subtree CPU/memory sums | (pure transform of the process list) |
 | `BatteryMetrics.swift` | charge, health, cycles, temperature, wattage | IOKit power sources + `AppleSmartBattery` registry |
@@ -98,6 +98,9 @@ These were all found and fixed against `top` / Activity Monitor / `ioreg`:
   `mach_timebase_info` (1/1 on Intel, 125/3 on Apple silicon).
 - **CPU total** — the arithmetic mean of per-core percentages. Matches `top`;
   a tick-weighted ratio skews on Apple silicon as cores park.
+- **Thermal pressure** — Darwin's `com.apple.system.thermalpressurelevel`
+  notification keeps the useful moderate/heavy split. If that private-but-stable
+  signal is unavailable, Hertz falls back to `ProcessInfo.thermalState`.
 - **Process memory** — physical footprint (`proc_pid_rusage`), not RSS.
   Matches Activity Monitor's "Memory" column.
 - **Memory pressure** — uses the kernel pressure sysctls when available:
