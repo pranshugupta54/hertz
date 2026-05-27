@@ -8,48 +8,35 @@ struct DashboardView: View {
     let updater: UpdateChecker
     @State private var sortByMemory = false
 
-    private var menuMaxHeight: CGFloat {
-        let pointer = NSEvent.mouseLocation
-        let activeScreen = NSScreen.screens.first { screen in
-            NSMouseInRect(pointer, screen.frame, false)
-        } ?? NSScreen.main
-        let visibleHeight = activeScreen?.visibleFrame.height ?? 720
-        return max(420, min(720, visibleHeight - 48))
-    }
-
     var body: some View {
-        ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: 0) {
-                HeaderStrip(hardware: model.hardware, health: model.health)
-                    .padding(.bottom, 10)
+        VStack(alignment: .leading, spacing: 0) {
+            HeaderStrip(hardware: model.hardware, health: model.health)
+                .padding(.bottom, 10)
 
-                Group {
-                    CPUSection(cpu: model.cpu, history: model.cpuHistory,
-                               sensors: model.sensors)
-                    divider
-                    MemorySection(mem: model.memory, history: model.memoryHistory)
-                    divider
-                    DiskSection(disk: model.disk)
-                    divider
-                    NetworkSection(net: model.network, history: model.networkHistory)
-                    if model.battery.present || !model.deviceBatteries.isEmpty {
-                        divider
-                        BatterySection(battery: model.battery,
-                                       devices: model.deviceBatteries)
-                    }
-                    divider
-                    ProcessSection(roots: model.processTree, sortByMemory: $sortByMemory)
-                }
-
+            Group {
+                CPUSection(cpu: model.cpu, history: model.cpuHistory,
+                           sensors: model.sensors)
                 divider
-                FooterBar(updater: updater)
-                    .padding(.top, 9)
+                MemorySection(mem: model.memory, history: model.memoryHistory)
+                divider
+                DiskSection(disk: model.disk)
+                divider
+                NetworkSection(net: model.network, history: model.networkHistory)
+                if model.battery.present || !model.deviceBatteries.isEmpty {
+                    divider
+                    BatterySection(battery: model.battery,
+                                   devices: model.deviceBatteries)
+                }
+                divider
+                ProcessSection(roots: model.processTree, sortByMemory: $sortByMemory)
             }
-            .padding(14)
-            .frame(width: 392)
+
+            divider
+            FooterBar(updater: updater)
+                .padding(.top, 9)
         }
+        .padding(14)
         .frame(width: 392)
-        .frame(maxHeight: menuMaxHeight)
     }
 
     private var divider: some View {
@@ -456,6 +443,7 @@ private struct ProcessSection: View {
     let roots: [ProcessNode]
     @Binding var sortByMemory: Bool
     @State private var expanded: Set<pid_t> = []
+    private let maxExpandedRowsHeight: CGFloat = 220
 
     private func metric(_ n: ProcessNode) -> Double {
         sortByMemory ? Double(n.subtreeMemory) : n.subtreeCPU
@@ -498,7 +486,24 @@ private struct ProcessSection: View {
         .buttonStyle(.plain)
     }
 
+    @ViewBuilder
+    private func rowsView(_ rows: [(node: ProcessNode, depth: Int)]) -> some View {
+        ForEach(rows, id: \.node.id) { row in
+            ProcessRow(node: row.node, depth: row.depth,
+                       isExpanded: expanded.contains(row.node.id),
+                       sortByMemory: sortByMemory) {
+                if expanded.contains(row.node.id) {
+                    expanded.remove(row.node.id)
+                } else {
+                    expanded.insert(row.node.id)
+                }
+            }
+        }
+    }
+
     var body: some View {
+        let rows = visibleRows
+
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Image(systemName: "waveform.path.ecg")
@@ -517,16 +522,16 @@ private struct ProcessSection: View {
                 }
             }
 
-            ForEach(visibleRows, id: \.node.id) { row in
-                ProcessRow(node: row.node, depth: row.depth,
-                           isExpanded: expanded.contains(row.node.id),
-                           sortByMemory: sortByMemory) {
-                    if expanded.contains(row.node.id) {
-                        expanded.remove(row.node.id)
-                    } else {
-                        expanded.insert(row.node.id)
+            if rows.count > 8 {
+                ScrollView(.vertical) {
+                    LazyVStack(alignment: .leading, spacing: 6) {
+                        rowsView(rows)
                     }
+                    .padding(.trailing, 4)
                 }
+                .frame(maxHeight: maxExpandedRowsHeight)
+            } else {
+                rowsView(rows)
             }
         }
     }
