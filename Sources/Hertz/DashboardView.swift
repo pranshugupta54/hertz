@@ -449,6 +449,8 @@ private struct ProcessSection: View {
     let roots: [ProcessNode]
     @Binding var sortByMemory: Bool
     @State private var expanded: Set<pid_t> = []
+    @State private var pendingTermination: ProcessActionTarget?
+    @State private var actionMessage: String?
 
     private func metric(_ n: ProcessNode) -> Double {
         sortByMemory ? Double(n.subtreeMemory) : n.subtreeCPU
@@ -502,6 +504,10 @@ private struct ProcessSection: View {
                 } else {
                     expanded.insert(row.node.id)
                 }
+            } onMessage: { message in
+                actionMessage = message
+            } onTerminate: { target in
+                pendingTermination = target
             }
         }
     }
@@ -541,7 +547,32 @@ private struct ProcessSection: View {
             } else {
                 rowsView(rows)
             }
+
+            if let actionMessage {
+                Text(actionMessage)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
         }
+        .alert(item: $pendingTermination) { target in
+            Alert(
+                title: Text("Terminate \(target.title)?"),
+                message: Text(terminationMessage(for: target)),
+                primaryButton: .destructive(Text("Terminate")) {
+                    let report = ProcessActions.terminate(target)
+                    actionMessage = report.message
+                },
+                secondaryButton: .cancel()
+            )
+        }
+    }
+
+    private func terminationMessage(for target: ProcessActionTarget) -> String {
+        if target.includesDescendants {
+            return "Hertz will send SIGTERM to the current process tree for \(target.terminationSummary), children first. Processes that already exited or changed identity are skipped."
+        }
+        return "Hertz will send SIGTERM to \(target.terminationSummary). Processes that already exited or changed identity are skipped."
     }
 }
 
@@ -553,8 +584,11 @@ private struct ProcessRow: View {
     let isExpanded: Bool
     let sortByMemory: Bool
     let onToggle: () -> Void
+    let onMessage: (String) -> Void
+    let onTerminate: (ProcessActionTarget) -> Void
 
     private var hasChildren: Bool { !node.children.isEmpty }
+    private var actionTarget: ProcessActionTarget { node.processActionTarget }
 
     var body: some View {
         HStack(spacing: 7) {
@@ -602,6 +636,40 @@ private struct ProcessRow: View {
         .frame(height: ProcessLayout.rowHeight)
         .contentShape(Rectangle())
         .onTapGesture { if hasChildren { onToggle() } }
+        .contextMenu {
+            Button {
+                ProcessActions.copyDetails(actionTarget)
+                onMessage(actionTarget.includesDescendants
+                          ? "Copied \(actionTarget.items.count) process rows"
+                          : "Copied \(actionTarget.title)")
+            } label: {
+                Label(actionTarget.includesDescendants
+                      ? "Copy Tree PIDs and Paths"
+                      : "Copy PID and Path",
+                      systemImage: "doc.on.doc")
+            }
+
+            if ProcessActions.canReveal(actionTarget) {
+                Button {
+                    if ProcessActions.reveal(actionTarget) {
+                        onMessage("Revealed \(actionTarget.title) in Finder")
+                    }
+                } label: {
+                    Label("Reveal in Finder", systemImage: "finder")
+                }
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                onTerminate(actionTarget)
+            } label: {
+                Label(actionTarget.includesDescendants
+                      ? "Terminate Process Tree..."
+                      : "Terminate Process...",
+                      systemImage: "xmark.circle")
+            }
+        }
     }
 }
 

@@ -119,6 +119,7 @@ command and must report `ALL CHECKS PASSED`.
 | `HertzApp.swift` | `@main` App — `MenuBarExtra` (`.window` style), starts `UpdateChecker` |
 | `MetricsModel.swift` | `@Observable` state + the 2s refresh timer |
 | `DashboardView.swift` | the whole dropdown UI — sectioned vertical panel |
+| `ProcessActions.swift` | process-row copy/reveal/terminate actions |
 | `UpdateChecker.swift` | auto-update from GitHub Releases |
 
 ### Dropdown layout
@@ -140,7 +141,7 @@ command and must report `ALL CHECKS PASSED`.
 ├──────────────────────────────────────────────┤
 │  ∿ TOP PROCESSES               CPU      MEM    │
 │     ▸ App (9)                  12.4   1.2 GB   │  process tree,
-│        helper                   0.4   350 MB  │  expandable
+│        helper                   0.4   350 MB  │  expandable, right-click actions
 ├──────────────────────────────────────────────┤
 │  ∿ Hertz 0.1.0  ⟳            ☑ Login    Quit ⏻ │  footer
 └──────────────────────────────────────────────┘
@@ -148,6 +149,13 @@ command and must report `ALL CHECKS PASSED`.
 
 One vertical instrument panel divided by hairlines. UI stays flat and native —
 no gradients, no faux-glass.
+
+Process rows expose contextual actions for troubleshooting: copy PID/path,
+reveal the executable or app bundle in Finder, and terminate the selected
+process tree after confirmation. Tree termination sends `SIGTERM` to
+descendants first and the parent last, skips protected or already-exited
+processes, and validates executable paths when possible so stale PIDs are not
+targeted accidentally.
 
 ## Auto-update
 
