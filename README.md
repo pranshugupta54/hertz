@@ -53,7 +53,7 @@ manual check in the footer. Nothing to do.
 - **Battery** — charge, live power rate, health, cycle count, temperature, adapter wattage,
   plus connected accessories (mouse, keyboard, trackpad)
 - **Processes** — a tree grouped by app, with subtree CPU/memory totals,
-  sortable by CPU or memory
+  sortable by CPU or memory, plus right-click copy, reveal, and terminate actions
 - **Health score** — a composite 0–100 at a glance
 - **Hardware header** — chip, cores, RAM, macOS version, uptime
 
