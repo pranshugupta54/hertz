@@ -9,41 +9,50 @@ struct DashboardView: View {
     @State private var sortByMemory = false
     @State private var cleanup = CleanupModel()
 
+    private var maxPanelHeight: CGFloat {
+        let visibleHeight = NSScreen.main?.visibleFrame.height ?? 900
+        return max(420, min(760, visibleHeight - 80))
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HeaderStrip(hardware: model.hardware, health: model.health)
-                .padding(.bottom, 10)
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: 0) {
+                HeaderStrip(hardware: model.hardware, health: model.health)
+                    .padding(.bottom, 10)
 
-            Group {
-                DiagnosisSection(insights: model.diagnostics,
-                                 records: model.flightRecorder,
-                                 report: model.diagnosticReport)
-                divider
-                CPUSection(cpu: model.cpu, history: model.cpuHistory,
-                           sensors: model.sensors)
-                divider
-                MemorySection(mem: model.memory, history: model.memoryHistory)
-                divider
-                DiskSection(disk: model.disk)
-                divider
-                NetworkSection(net: model.network, history: model.networkHistory)
-                if model.battery.present || !model.deviceBatteries.isEmpty {
+                Group {
+                    DiagnosisSection(insights: model.diagnostics,
+                                     records: model.flightRecorder,
+                                     report: model.diagnosticReport)
                     divider
-                    BatterySection(battery: model.battery,
-                                   devices: model.deviceBatteries)
+                    CPUSection(cpu: model.cpu, history: model.cpuHistory,
+                               sensors: model.sensors)
+                    divider
+                    MemorySection(mem: model.memory, history: model.memoryHistory)
+                    divider
+                    DiskSection(disk: model.disk)
+                    divider
+                    NetworkSection(net: model.network, history: model.networkHistory)
+                    if model.battery.present || !model.deviceBatteries.isEmpty {
+                        divider
+                        BatterySection(battery: model.battery,
+                                       devices: model.deviceBatteries)
+                    }
+                    divider
+                    ProcessSection(roots: model.processTree, sortByMemory: $sortByMemory)
+                    divider
+                    CleanupSection(model: cleanup)
                 }
-                divider
-                ProcessSection(roots: model.processTree, sortByMemory: $sortByMemory)
-                divider
-                CleanupSection(model: cleanup)
-            }
 
-            divider
-            FooterBar(updater: updater)
-                .padding(.top, 9)
+                divider
+                FooterBar(updater: updater)
+                    .padding(.top, 9)
+            }
+            .padding(14)
+            .frame(width: 392, alignment: .leading)
         }
-        .padding(14)
         .frame(width: 392)
+        .frame(maxHeight: maxPanelHeight)
     }
 
     private var divider: some View {
