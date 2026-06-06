@@ -829,7 +829,9 @@ private struct CleanupSection: View {
                         .help("Copy cleanup report")
 
                         Button {
-                            confirmClean = true
+                            withAnimation(.easeInOut(duration: 0.15)) {
+                                confirmClean = true
+                            }
                         } label: {
                             Label("Clean", systemImage: "trash")
                                 .font(.caption2)
@@ -841,6 +843,7 @@ private struct CleanupSection: View {
                     }
 
                     Button {
+                        confirmClean = false
                         model.scanNow()
                     } label: {
                         Label(model.hasCandidates ? "Rescan" : "Scan",
@@ -850,6 +853,19 @@ private struct CleanupSection: View {
                     .buttonStyle(.plain)
                     .disabled(model.isScanning || model.isCleaning)
                     .help("Scan safe cleanup candidates")
+                }
+            }
+
+            if confirmClean {
+                CleanupConfirmPanel(candidateCount: model.scan.candidates.count) {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        confirmClean = false
+                    }
+                    model.cleanSafeCandidates()
+                } cancel: {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        confirmClean = false
+                    }
                 }
             }
 
@@ -882,15 +898,41 @@ private struct CleanupSection: View {
                 DetailLine(text: "Hertz only scans known regenerable caches and refuses protected paths.")
             }
         }
-        .confirmationDialog("Clean \(model.scan.candidates.count) safe cache groups?",
-                            isPresented: $confirmClean) {
-            Button("Clean Safe Caches", role: .destructive) {
-                model.cleanSafeCandidates()
+    }
+}
+
+private struct CleanupConfirmPanel: View {
+    let candidateCount: Int
+    let clean: () -> Void
+    let cancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Clean \(candidateCount) safe cache group\(candidateCount == 1 ? "" : "s")?")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.primary)
+            Text("Only listed low-risk cache contents are removed. User data, preferences, app support, and system paths are not touched.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 8) {
+                Button(action: cancel) {
+                    Text("Cancel")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+
+                Button(action: clean) {
+                    Text("Clean Safe Caches")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This removes only the listed low-risk cache contents. User data, preferences, app support, and system paths are not touched.")
         }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.08)))
     }
 }
 
