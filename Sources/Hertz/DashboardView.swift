@@ -19,41 +19,46 @@ struct DashboardView: View {
     }
 
     var body: some View {
-        ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: 0) {
-                HeaderStrip(hardware: model.hardware, health: model.health)
-                    .padding(.bottom, 10)
+        VStack(alignment: .leading, spacing: 0) {
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 0) {
+                    HeaderStrip(hardware: model.hardware, health: model.health)
+                        .padding(.bottom, 10)
 
-                Group {
-                    DiagnosisSection(insights: model.diagnostics,
-                                     records: model.flightRecorder,
-                                     report: model.diagnosticReport)
-                    divider
-                    CPUSection(cpu: model.cpu, history: model.cpuHistory,
-                               sensors: model.sensors)
-                    divider
-                    MemorySection(mem: model.memory, history: model.memoryHistory)
-                    divider
-                    DiskSection(disk: model.disk)
-                    divider
-                    NetworkSection(net: model.network, history: model.networkHistory)
-                    if model.battery.present || !model.deviceBatteries.isEmpty {
+                    Group {
+                        DiagnosisSection(insights: model.diagnostics,
+                                         records: model.flightRecorder,
+                                         report: model.diagnosticReport)
                         divider
-                        BatterySection(battery: model.battery,
-                                       devices: model.deviceBatteries)
+                        CPUSection(cpu: model.cpu, history: model.cpuHistory,
+                                   sensors: model.sensors)
+                        divider
+                        MemorySection(mem: model.memory, history: model.memoryHistory)
+                        divider
+                        DiskSection(disk: model.disk)
+                        divider
+                        NetworkSection(net: model.network, history: model.networkHistory)
+                        if model.battery.present || !model.deviceBatteries.isEmpty {
+                            divider
+                            BatterySection(battery: model.battery,
+                                           devices: model.deviceBatteries)
+                        }
+                        divider
+                        ProcessSection(roots: model.processTree, sortByMemory: $sortByMemory)
+                        divider
+                        CleanupSection(model: cleanup)
                     }
-                    divider
-                    ProcessSection(roots: model.processTree, sortByMemory: $sortByMemory)
-                    divider
-                    CleanupSection(model: cleanup)
                 }
-
-                divider
-                FooterBar(updater: updater)
-                    .padding(.top, 9)
+                .padding(14)
+                .frame(width: 392, alignment: .leading)
             }
-            .padding(14)
-            .frame(width: 392, alignment: .leading)
+            .frame(width: 392)
+
+            footerDivider
+            FooterBar(updater: updater)
+                .padding(.horizontal, 14)
+                .padding(.top, 9)
+                .padding(.bottom, 14)
         }
         .frame(width: 392, height: menuHeight)
     }
@@ -63,6 +68,13 @@ struct DashboardView: View {
             .fill(Color.primary.opacity(0.08))
             .frame(height: 1)
             .padding(.vertical, 9)
+    }
+
+    private var footerDivider: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.08))
+            .frame(height: 1)
+            .padding(.horizontal, 14)
     }
 }
 
