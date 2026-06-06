@@ -9,9 +9,13 @@ struct DashboardView: View {
     @State private var sortByMemory = false
     @State private var cleanup = CleanupModel()
 
-    private var maxPanelHeight: CGFloat {
-        let visibleHeight = NSScreen.main?.visibleFrame.height ?? 900
-        return max(420, min(760, visibleHeight - 80))
+    private var menuHeight: CGFloat {
+        let pointer = NSEvent.mouseLocation
+        let activeScreen = NSScreen.screens.first { screen in
+            NSMouseInRect(pointer, screen.frame, false)
+        } ?? NSScreen.main
+        let visibleHeight = activeScreen?.visibleFrame.height ?? 720
+        return max(420, min(720, visibleHeight - 48))
     }
 
     var body: some View {
@@ -51,8 +55,7 @@ struct DashboardView: View {
             .padding(14)
             .frame(width: 392, alignment: .leading)
         }
-        .frame(width: 392)
-        .frame(maxHeight: maxPanelHeight)
+        .frame(width: 392, height: menuHeight)
     }
 
     private var divider: some View {
