@@ -42,6 +42,7 @@ flowchart TB
         sys["SystemMetrics"]
         proc["ProcessCollector → ProcessTree"]
         bat["BatteryMetrics"]
+        power["PowerAssertions"]
         clean["CleanupScout"]
         smc["SMC"]
         health["HealthScore"]
@@ -86,6 +87,7 @@ sequenceDiagram
 | `ProcessCollector.swift` | process list — pid, name, CPU, memory, path | `libproc` |
 | `ProcessTree.swift` | parent/child forest + subtree CPU/memory sums | (pure transform of the process list) |
 | `BatteryMetrics.swift` | charge, health, cycles, temperature, battery/adapter wattage | IOKit power sources + `AppleSmartBattery` registry |
+| `PowerAssertions.swift` | active sleep/display blockers grouped by process | IOKit `IOPMCopyAssertionsByProcess` |
 | `CleanupScout.swift` | read-only cache scan + confirmed cleanup of allowlisted safe paths | `FileManager` |
 | `SMC.swift` | CPU temperature, fan speed | the `AppleSMC` user client |
 | `HealthScore.swift` | composite 0–100 score | (pure function of the snapshots) |
@@ -137,6 +139,9 @@ command and must report `ALL CHECKS PASSED`.
 │  ◉ DIAGNOSIS                         Copy ⧉  │  current bottleneck,
 │     System looks balanced                    │  recent pressure events
 ├──────────────────────────────────────────────┤
+│  ◐ SLEEP BLOCKERS                    Copy ⧉  │  apps/daemons holding
+│     Codex is preventing sleep                │  active power assertions
+├──────────────────────────────────────────────┤
 │  ▣ CPU                                 14.9%  │
 │     ∿∿∿ sparkline ∿∿∿                          │
 │     ▁▃▅▂ per-core bars        load · temp      │
@@ -168,6 +173,15 @@ process tree after confirmation. Tree termination sends `SIGTERM` to
 descendants first and the parent last, skips protected or already-exited
 processes, and validates executable paths when possible so stale PIDs are not
 targeted accidentally.
+
+Sleep Blocker Watch reads active IOKit power assertions and groups meaningful
+system/display sleep blockers by process. Hertz suppresses baseline "user is
+active" style assertions and known display-on noise, then shows a compact row
+only when something is actually holding sleep. Actions are intentionally
+read-only: copy a report, reveal the app/executable when the path is known, or
+open Activity Monitor. Hertz does not clear another process's assertion because
+it may be protecting real work such as a call, backup, transfer, render, or
+build.
 
 Cleanup Scout is deliberately not part of the 2-second metrics loop. Users
 start a scan manually, review low-risk cache groups, can reveal or copy a

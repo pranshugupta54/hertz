@@ -20,6 +20,7 @@ final class MetricsModel {
     var network = NetSnapshot()
     var battery = BatterySnapshot()
     var deviceBatteries: [DeviceBattery] = []
+    var powerAssertions = PowerAssertionsSnapshot()
     var processes: [ProcSample] = []
     var processTree: [ProcessNode] = []
     var cpuHistory: [Double] = []     // recent CPU totals for the sparkline
@@ -37,6 +38,7 @@ final class MetricsModel {
 
     @ObservationIgnored private let system = SystemMetrics()
     @ObservationIgnored private let batteryReader = BatteryMetrics()
+    @ObservationIgnored private let powerAssertionReader = PowerAssertionReader()
     @ObservationIgnored private let collector = ProcessCollector()
     @ObservationIgnored private let smc = SMCReader()
     @ObservationIgnored private var timer: Timer?
@@ -59,6 +61,7 @@ final class MetricsModel {
         deviceBatteries = batteryReader.accessories()
         sensors = smc.read()
         processes = collector.sample().sorted { $0.cpu > $1.cpu }
+        powerAssertions = powerAssertionReader.read(processes: processes)
         processTree = buildProcessTree(processes)
         health = computeHealth(cpu: cpu, memory: memory, disk: disk, battery: battery)
         diagnostics = diagnose(diagnosticContext)
