@@ -284,6 +284,27 @@ do {
           + "cleaned \(fmtGB(result.cleanedBytes))")
 }
 
+// MARK: - Sleep blocker assertions
+
+do {
+    let processes = ProcessCollector().sample()
+    let snapshot = PowerAssertionReader().read(processes: processes)
+    let groupsPlausible = snapshot.groups.allSatisfy { group in
+        !group.displayName.isEmpty
+            && !group.assertions.isEmpty
+            && group.assertions.allSatisfy { assertion in
+                assertion.isActive
+                    && (assertion.blocksSystemSleep || assertion.blocksDisplaySleep)
+            }
+    }
+    let report = powerAssertionsReport(snapshot)
+    check("Sleep Blocker Watch collector",
+          snapshot.readError.isEmpty && groupsPlausible
+          && report.contains("Hertz Sleep Blocker Watch"),
+          "read \(snapshot.totalAssertions) assertion(s), "
+          + "\(snapshot.groups.count) sleep blocker process group(s)")
+}
+
 // MARK: - SMC sensors
 
 do {

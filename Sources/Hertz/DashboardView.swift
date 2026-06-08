@@ -29,6 +29,10 @@ struct DashboardView: View {
                         DiagnosisSection(insights: model.diagnostics,
                                          records: model.flightRecorder,
                                          report: model.diagnosticReport)
+                        if model.powerAssertions.hasBlockers {
+                            divider
+                            SleepBlockerSection(snapshot: model.powerAssertions)
+                        }
                         divider
                         CPUSection(cpu: model.cpu, history: model.cpuHistory,
                                    sensors: model.sensors)
@@ -123,6 +127,187 @@ private struct HeaderStrip: View {
         }
         .font(.caption2)
         .foregroundStyle(.secondary)
+    }
+}
+
+// MARK: - Sleep blockers
+
+private struct SleepBlockerSection: View {
+    let snapshot: PowerAssertionsSnapshot
+    @State private var copied = false
+    @State private var message: String?
+
+    private var visibleGroups: [PowerAssertionGroup] {
+        Array(snapshot.groups.prefix(4))
+    }
+
+    private var title: String {
+        if snapshot.groups.count == 1 {
+            return "\(snapshot.groups[0].displayName) is preventing sleep"
+        }
+        return "\(snapshot.groups.count) processes are preventing sleep"
+    }
+
+    private var detail: String {
+        let system = snapshot.groups.filter(\.blocksSystemSleep).count
+        let display = snapshot.groups.filter { !$0.blocksSystemSleep && $0.blocksDisplaySleep }.count
+        if system > 0 && display > 0 {
+            return "\(system) blocking system sleep · \(display) blocking display sleep"
+        }
+        if system > 0 {
+            return "System idle sleep is blocked"
+        }
+        return "Display sleep is blocked"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader(icon: "moon.zzz.fill", title: "SLEEP BLOCKERS") {
+                HStack(spacing: 8) {
+                    Label("\(snapshot.blockerCount)", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                    Button {
+                        PowerAssertionActions.copyReport(snapshot)
+                        copied = true
+                        message = "Copied sleep blocker report"
+                    } label: {
+                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(copied ? Color.green : Color.secondary.opacity(0.65))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Copy sleep blocker report")
+                    Button {
+                        PowerAssertionActions.openActivityMonitor()
+                        message = "Opened Activity Monitor"
+                    } label: {
+                        Image(systemName: "gauge.medium")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open Activity Monitor")
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(visibleGroups) { group in
+                    SleepBlockerRow(group: group) { text in
+                        message = text
+                    }
+                }
+            }
+
+            if snapshot.groups.count > visibleGroups.count {
+                Text("+\(snapshot.groups.count - visibleGroups.count) more")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+
+            if let message {
+                Text(message)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+        }
+    }
+}
+
+private struct SleepBlockerRow: View {
+    let group: PowerAssertionGroup
+    let onMessage: (String) -> Void
+
+    private var duration: String {
+        guard let start = group.longestRunningStart else { return "" }
+        let seconds = max(0, Int(Date().timeIntervalSince(start)))
+        let hours = seconds / 3600
+        let minutes = (seconds % 3600) / 60
+        if hours > 0 { return "\(hours)h \(minutes)m" }
+        if minutes > 0 { return "\(minutes)m" }
+        return "<1m"
+    }
+
+    private var blockerKind: String {
+        if group.blocksSystemSleep { return "system sleep" }
+        if group.blocksDisplaySleep { return "display sleep" }
+        return "sleep"
+    }
+
+    var body: some View {
+        HStack(spacing: 7) {
+            ProcessIcon(path: group.processPath)
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 5) {
+                    Text(group.displayName)
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                    if group.assertions.count > 1 {
+                        Text("\(group.assertions.count)")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Capsule().fill(Color.primary.opacity(0.1)))
+                    }
+                }
+                Text(group.primaryLabel)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            VStack(alignment: .trailing, spacing: 1) {
+                Text(blockerKind)
+                    .font(.caption2)
+                    .foregroundStyle(group.blocksSystemSleep ? .orange : .secondary)
+                    .lineLimit(1)
+                if !duration.isEmpty {
+                    Text(duration)
+                        .font(.caption2)
+                        .monospacedDigit()
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button {
+                PowerAssertionActions.copyReport(for: group)
+                onMessage("Copied \(group.displayName)")
+            } label: {
+                Label("Copy Blocker Details", systemImage: "doc.on.doc")
+            }
+
+            if PowerAssertionActions.canReveal(group) {
+                Button {
+                    if PowerAssertionActions.reveal(group) {
+                        onMessage("Revealed \(group.displayName) in Finder")
+                    }
+                } label: {
+                    Label("Reveal in Finder", systemImage: "finder")
+                }
+            }
+
+            Button {
+                PowerAssertionActions.openActivityMonitor()
+                onMessage("Opened Activity Monitor")
+            } label: {
+                Label("Open Activity Monitor", systemImage: "gauge.medium")
+            }
+        }
     }
 }
 

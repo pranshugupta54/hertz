@@ -54,6 +54,8 @@ manual check in the footer. Nothing to do.
   plus connected accessories (mouse, keyboard, trackpad)
 - **Diagnosis** — current bottleneck, recent pressure events, and a copyable
   troubleshooting snapshot for support threads
+- **Sleep Blocker Watch** — shows apps or daemons currently preventing system
+  sleep, with copy, reveal, and Activity Monitor actions
 - **Processes** — a tree grouped by app, with subtree CPU/memory totals,
   sortable by CPU or memory, plus right-click copy, reveal, and terminate actions
 - **Cleanup Scout** — read-only scan of safe developer caches, with review,
@@ -74,6 +76,7 @@ Everything is read directly from the OS — no shelling out, no polling `top`:
 | Battery | IOKit power sources + the `AppleSmartBattery` registry |
 | Temperature / fans | the `AppleSMC` user client |
 | Network | `getifaddrs` + CoreWLAN |
+| Sleep blockers | IOKit power assertions — `IOPMCopyAssertionsByProcess` |
 | Cleanup Scout | FileManager scan of allowlisted user cache paths |
 
 Hertz also keeps a small local flight recorder of recent pressure changes, so
@@ -81,6 +84,10 @@ the menu can explain what just became slow instead of only showing live gauges.
 
 Per-process CPU and memory match Activity Monitor — CPU-time deltas converted
 from Mach absolute-time units, memory reported as physical footprint (not RSS).
+
+Sleep Blocker Watch is read-only. It explains who is currently holding active
+power assertions, but it does not force-clear another app's assertion because
+those assertions may be protecting a call, transfer, backup, render, or build.
 
 Cleanup Scout is inspired by Mole's MIT-licensed safety model: review first,
 known cache locations only, protected paths refused, and destructive work gated
